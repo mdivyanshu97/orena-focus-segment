@@ -134,22 +134,22 @@ training corpus.
 
 ### 3.1 Uniform frame sampling
 
-For a video interval with start time \(t_s\), end time \(t_e\), and frame rate
-\(f\), the inclusive frame bounds are
+For a video interval with start time $t_s$, end time $t_e$, and frame rate
+$f$, the inclusive frame bounds are
 
-\[
+$$
 i_s = \operatorname{round}(f t_s), \qquad
 i_e = \operatorname{round}(f t_e).
-\]
+$$
 
-For a budget of \(K\) frames, the sampled indices are
+For a budget of $K$ frames, the sampled indices are
 
-\[
+$$
 i_j =
 \operatorname{round}\left(
 i_s + \frac{j}{K-1}(i_e-i_s)
 \right), \qquad j=0,\ldots,K-1.
-\]
+$$
 
 Indices are clamped to the video, de-duplicated, and kept in chronological
 order. FRAME examples use one image; SEGMENT and PROCEDURE examples use up to
@@ -164,11 +164,11 @@ question, interval, frame count, and overlay state in its key.
 
 Temporal answers refer to absolute procedure time, whereas a trimmed video
 begins at local time zero. For a sampled frame at local clip time
-\(t_{\text{clip}}\), we render
+$t_{\text{clip}}$, we render
 
-\[
+$$
 t_{\text{absolute}} = t_{\text{request-start}} + t_{\text{clip}}.
-\]
+$$
 
 The timestamp is drawn in the upper-left corner as yellow `hh:mm:ss` text with
 a black outline. The overlay is used for timestamp prediction, temporal
@@ -183,15 +183,15 @@ The base network is Qwen3-VL-4B-Instruct. It receives a sequence of images and
 text through the native multimodal chat representation and autoregressively
 generates the answer.
 
-We use low-rank adaptation. For a frozen weight matrix \(W\), the trainable
+We use low-rank adaptation. For a frozen weight matrix $W$, the trainable
 update is
 
-\[
+$$
 W' = W + \frac{\alpha}{r} BA,
-\]
+$$
 
-where \(A\) and \(B\) are low-rank matrices, \(r\) is the adapter rank, and
-\(\alpha\) controls update scale.
+where $A$ and $B$ are low-rank matrices, $r$ is the adapter rank, and
+$\alpha$ controls update scale.
 
 ### 4.2 Stage A: full-visibility surgical adaptation
 
@@ -217,21 +217,21 @@ gradient-accumulation steps. The effective batch size is again 16, producing
 6,237 optimizer updates.
 
 Both stages use bfloat16 precision, fused AdamW, a learning rate of
-\(10^{-4}\), cosine decay, a 3% warm-up fraction, zero weight decay,
+$10^{-4}$, cosine decay, a 3% warm-up fraction, zero weight decay,
 gradient-norm clipping at 1.0, gradient checkpointing, and random seed 42.
 
 ### 4.4 Supervised objective
 
 The training sequence consists of the system instruction, image tokens,
 question, and gold answer. Loss is applied only to answer tokens. If
-\(\mathcal{A}\) denotes answer-token positions, the objective is
+$\mathcal{A}$ denotes answer-token positions, the objective is
 
-\[
+$$
 \mathcal{L} =
 -\frac{1}{|\mathcal{A}|}
 \sum_{t \in \mathcal{A}}
 \log p_\theta(y_t \mid x, y_{<t}).
-\]
+$$
 
 Padding, image placeholders, system instructions, and question tokens are
 masked. No capability reweighting, synthetic replay mixture, or auxiliary
@@ -254,11 +254,11 @@ If the question itself contains one or more timestamps, broad sampling is
 unnecessary and may omit the relevant event. We extract at most two timestamps
 and create a window
 
-\[
+$$
 [a_m-30\text{ s},\,a_m+30\text{ s}]
-\]
+$$
 
-around each anchor \(a_m\). The 64-frame budget is divided between the
+around each anchor $a_m$. The 64-frame budget is divided between the
 windows, which are clamped to the available segment. This increases temporal
 density without increasing the total frame budget.
 
@@ -266,9 +266,9 @@ density without increasing the total frame budget.
 
 For questions whose answer is one timestamp, inference uses two passes:
 
-1. predict \(p_0\) from 64 frames distributed over the full segment;
-2. if \(p_0\) is valid, sample 64 frames from
-   \([p_0-15\text{ s}, p_0+15\text{ s}]\) and predict \(p_1\).
+1. predict $p_0$ from 64 frames distributed over the full segment;
+2. if $p_0$ is valid, sample 64 frames from
+   $[p_0-15\text{ s}, p_0+15\text{ s}]$ and predict $p_1$.
 
 The second answer is used only if it contains a valid timestamp; otherwise the
 first answer is retained. Questions requesting multiple time points do not use
