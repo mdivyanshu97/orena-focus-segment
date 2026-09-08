@@ -1,7 +1,7 @@
-# ORena FOCUS SEGMENT algorithm
+# DISCOVR-SEGMENT
 
-Public release of the **Incision Impossible** submission to the ORena SAVE
-FOCUS 2026 SEGMENT track.
+Public release of **DISCOVR-SEGMENT**, submitted to the ORena SAVE FOCUS 2026
+SEGMENT track by team **Incision Impossible**.
 
 This repository contains the exact inference source recovered from the selected
 container, together with reproducible weight-download, verification, Docker
@@ -12,7 +12,8 @@ separately on Hugging Face.
 
 | Field | Value |
 |---|---|
-| Algorithm | `DISCOVER SEGMENT T1` |
+| Public algorithm name | `DISCOVR-SEGMENT` |
+| Grand Challenge algorithm | `DISCOVER SEGMENT T1` |
 | Method ID | `8c0c5a0a-e147-486b-90c8-abbf0afeb624` |
 | Image version | `b74f595d-06d4-488a-b76b-217544cf8e55` |
 | Evaluation ID | `0b0b5564-a3e2-43f3-aa8e-a34fc3e485c9` |
@@ -60,6 +61,8 @@ The download script pins Hugging Face revision
 Docker with the NVIDIA runtime is required for the full smoke test.
 
 ```bash
+python scripts/download_weights.py
+python scripts/verify_release.py
 ./do_build.sh
 ./do_save.sh
 ```
@@ -69,6 +72,18 @@ To run `./do_test_run.sh`, first provide a compatible Grand Challenge fixture
 under `test/input/interface_1/`. The original fixture is intentionally not
 redistributed because challenge videos and annotations are not part of this
 source release.
+
+## Included release scripts
+
+- `scripts/download_weights.py` downloads the exact checkpoint at its pinned
+  Hugging Face revision.
+- `scripts/verify_release.py` verifies the recovered source and model SHA-256
+  values.
+- `do_build.sh` validates that the checkpoint is present and builds the
+  `linux/amd64` challenge image.
+- `do_test_run.sh` runs the image offline with the NVIDIA runtime and checks
+  that `answer.json` contains exactly one response per request.
+- `do_save.sh` rebuilds and exports the uploadable Docker archive.
 
 ## Reproducibility and provenance
 

@@ -3,6 +3,7 @@
   "released_utc": "2026-09-08",
   "team": "Incision Impossible",
   "track": "SEGMENT",
+  "release_name": "DISCOVR-SEGMENT",
   "challenge_algorithm": {
     "name": "DISCOVER SEGMENT T1",
     "method_id": "8c0c5a0a-e147-486b-90c8-abbf0afeb624",
