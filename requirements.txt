@@ -1,0 +1,30 @@
+# Pins the torch already in the base image (upstream 64a264c's rationale): if a
+# dependency wants a different torch, pip must fail loudly naming it, NOT silently
+# swap in the default PyPI wheel — that wheel is built against CUDA 13.0 and needs
+# driver >= 580, which the L40S fleet (570.211.01) does not have.
+torch==2.11.0
+
+orena-focus==0.3.5
+
+# Direct imports of inference.py. They also arrive as transitive dependencies
+# of orena-focus, but anything imported directly is declared explicitly.
+numpy>=1.23.0
+pillow>=9.0
+
+# ── Our model stack (QwenVLEngine + prompts) ────────────────────────────────
+# The base image (pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime) provides torch +
+# torchvision; everything else our engine needs at runtime is pinned here to the
+# validated inference environment.
+#
+# NOTE: qwen_vl_utils.process_vision_info is imported INSIDE QwenVLEngine.generate();
+# if it is missing, every question raises and is swallowed by the per-question except,
+# silently scoring the WHOLE batch 0. The load-time warm-up generate() in inference.py
+# guards against this by failing the run loudly when a dependency is absent.
+transformers==5.4.0
+qwen-vl-utils==0.0.14
+peft==0.19.1
+accelerate==1.14.0
+safetensors==0.7.0
+einops==0.8.2
+sentencepiece
+decord>=0.6.0

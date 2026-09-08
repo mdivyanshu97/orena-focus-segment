@@ -1,0 +1,8 @@
+This project contains code derived from the ORena FOCUS algorithm submission
+template by IMSY-DKFZ, licensed under the Apache License 2.0.
+
+The released checkpoint is derived from Qwen/Qwen3-VL-4B-Instruct, also
+distributed under the Apache License 2.0.
+
+ORena, SAVE FOCUS, dataset names, and challenge assets belong to their
+respective owners. No challenge videos or patient data are distributed here.

@@ -1,0 +1,58 @@
+Surgical Foreign-Object Safety Knowledge
+========================================
+Reference facts for reasoning about retained surgical items (RSI), foreign-object
+purpose, and complications in laparoscopic colorectal / cholecystectomy surgery.
+Use only when the question asks about general purpose, retention, or consequences;
+defer to the visible video for what is actually happening on screen.
+
+Retention at end of procedure (which FOs normally stay vs are removed)
+----------------------------------------------------------------------
+- Removed / must be accounted for before closure: Sponge, Needle, Specimen,
+  Gallstone, Specimen Bag, Silicone Loop, External Drain (drains are removed later,
+  not left permanently), Clip applier and instruments.
+- Intentionally left in the body permanently: Mesh (an implant), and ligation Clips
+  placed on vessels/ducts (titanium/polymer clips are designed for permanent occlusion).
+- Silicone (vessel) loops are for TEMPORARY occlusion/retraction/identification and
+  are removed; they are not permanent implants.
+
+Clips (vessel ligation)
+-----------------------
+- Clips allow rapid, reliable ligation in confined laparoscopic spaces and suit
+  small / thin-walled vessels; they are unsuitable for thick or friable tissue
+  (which can tear). Titanium is radiopaque but causes CT/MRI artifact.
+- Clips are placed proximally (on the high-pressure inflow side) to control antegrade
+  inflow; the convention is typically two clips proximal, one distal, before dividing.
+- Electrocautery near a clipped vessel should be minimized: thermal necrosis of the
+  vessel wall can cause delayed tissue breakdown and delayed bleeding, and excess
+  heat may compromise clip seating. (Consequences: tissue necrosis, delayed vessel
+  breakdown / delayed hemorrhage.)
+- In sigmoid/rectal resection the inferior mesenteric artery (IMA) and inferior
+  mesenteric vein (IMV) are commonly divided with clips/ligation.
+
+Sponges and hemostasis
+----------------------
+- A Sponge is used for fluid absorption, gentle retraction, packing, and applying
+  pressure. Stepwise hemostasis: direct pressure/packing first; if focal bleeding
+  persists, escalate to suture ligation (sponge pressure alone is not enough for
+  focal arterial/venous bleeding).
+
+Drains
+------
+- An External Drain evacuates fluid and is used to MONITOR for complications such as
+  anastomotic leak. Drains are typically removed when output falls below ~25-50 ml/24h
+  and is serous in character.
+- Feculent / enteric drainage suggests an anastomotic leak. A malpositioned drain may
+  fail to drain effectively and delay detection of complications (missed early detection).
+- Anastomotic leak is a major, potentially fatal complication of colorectal anastomosis;
+  drains can help detect it but are neither preventive nor independently diagnostic.
+
+Suturing near bowel
+-------------------
+- Control bite depth when suturing the bowel wall: reinforcing/outer bites are
+  seromuscular to avoid unnecessary full-thickness injury, while careless/excessive
+  depth risks luminal narrowing or injury. Sutures may be placed to control focal
+  bleeding or repair a serosal tear.
+
+(All facts verified against AORN, ASCRS, and peer-reviewed sources; phrasings reflect
+that verification. Scene-specific answers — e.g. exactly which vessel is being divided —
+still require reading the video.)

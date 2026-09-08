@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+title: "Incision Impossible: ORena FOCUS SEGMENT Algorithm"
+message: "If you use this challenge algorithm, please cite this software release."
+type: software
+authors:
+  - family-names: "Incision Impossible Team"
+repository-code: "https://github.com/mdivyanshu97/orena-focus-segment"
+license: Apache-2.0
+date-released: 2026-09-08

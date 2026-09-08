@@ -1,0 +1,8 @@
+resources/base/
+test/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.cache/
+*.tar.gz
+*.log

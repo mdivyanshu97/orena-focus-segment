@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "released_utc": "2026-09-08",
+  "team": "Incision Impossible",
+  "track": "SEGMENT",
+  "challenge_algorithm": {
+    "name": "DISCOVER SEGMENT T1",
+    "method_id": "8c0c5a0a-e147-486b-90c8-abbf0afeb624",
+    "image_version": "b74f595d-06d4-488a-b76b-217544cf8e55",
+    "evaluation_id": "0b0b5564-a3e2-43f3-aa8e-a34fc3e485c9",
+    "submission_id": "97e7f4f8-0ea1-4fb8-8aed-1bc7bd4530fe",
+    "pre_evaluation_score": 0.5656564984886887,
+    "questions_forfeited": 0,
+    "questions_unanswered": 0
+  },
+  "container": {
+    "candidate": "fullvisw64-segment-routed",
+    "archive_sha256": "36e282a5b99e96e721b18a44ade8f50e3719070bb8b40347007ca3b31ba73727"
+  },
+  "model": {
+    "base_model": "Qwen/Qwen3-VL-4B-Instruct",
+    "public_repo": "Div97/orena-focus-segment-fullvis-w64",
+    "model_sha256": "622fd66547b2ad88f9fcf9c74a22450f44b4c88cef8fcf1a9b464de2a51dcff3",
+    "size_bytes": 8875719408
+  }
+}
