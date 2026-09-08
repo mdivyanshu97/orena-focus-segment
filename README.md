@@ -49,8 +49,10 @@ flowchart TD
 
 Shared processing includes absolute timestamp overlays for temporal questions,
 question-derived answer formats, a bundled surgical knowledge prompt, and
-defensive batch I/O. See [METHOD.md](METHOD.md) for the complete routing,
-training, and runtime description.
+defensive batch I/O. See [METHOD.md](METHOD.md) for the concise implementation
+description and [METHOD_DESCRIPTION.md](METHOD_DESCRIPTION.md) for the detailed
+challenge-submission draft covering data generation, training, inference,
+evaluation, provenance, and limitations.
 
 ## Weights
 
@@ -106,7 +108,8 @@ source release.
 
 ## Reproducibility and provenance
 
-See [TRAINING.md](TRAINING.md) and
+See [TRAINING.md](TRAINING.md),
+[METHOD_DESCRIPTION.md](METHOD_DESCRIPTION.md), and
 [provenance/release.json](provenance/release.json). The source hashes in the
 manifest were measured directly from the selected OCI image, not from the later
 experimental working tree.

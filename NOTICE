@@ -4,5 +4,10 @@ template by IMSY-DKFZ, licensed under the Apache License 2.0.
 The released checkpoint is derived from Qwen/Qwen3-VL-4B-Instruct, also
 distributed under the Apache License 2.0.
 
+Training included an SSG-VQA surgical scene-literacy warm-up. The SSG-VQA
+repository states that its data are available for non-commercial scientific
+research under CC BY-NC-SA 4.0. The Apache-2.0 license in this repository
+applies to the released code and does not override third-party dataset terms.
+
 ORena, SAVE FOCUS, dataset names, and challenge assets belong to their
 respective owners. No challenge videos or patient data are distributed here.
