@@ -20,18 +20,37 @@ separately on Hugging Face.
 | Pre-evaluation score | `0.5656564984886887` |
 | Forfeited / unanswered | `0 / 0` |
 
-## Method
+## Method at a glance
 
-The algorithm uses a merged `Qwen/Qwen3-VL-4B-Instruct` model fine-tuned for
-foreign-object visual question answering:
+DISCOVR-SEGMENT uses a merged `Qwen/Qwen3-VL-4B-Instruct` model fine-tuned for
+surgical foreign-object visual question answering. Its routing changes where
+the fixed frame budget is spent without adding an external detector or service.
 
-- 64 uniformly sampled frames at up to 768 px longest side;
-- absolute timestamps redrawn onto temporal frames;
-- question-derived answer-format constraints;
-- a surgical knowledge prompt;
-- question-window routing for timestamp-anchored non-cascade questions;
-- a 30-second refinement pass for single-timestamp questions;
-- defensive batch I/O that always emits one response per request.
+```mermaid
+flowchart TD
+    A["Batch input<br/>request.json + plain/qID.mp4"] --> B["Tolerant request loading<br/>and answer-format inference"]
+    B --> C{"Single-timestamp<br/>time question?"}
+    C -- Yes --> D["Pass 1<br/>64 frames over the full clip<br/>with absolute-time overlay"]
+    D --> E["Merged Qwen3-VL-4B"]
+    E --> F{"Valid timestamp<br/>predicted?"}
+    F -- Yes --> G["Pass 2<br/>64 frames in a 30 s window<br/>around the prediction"]
+    F -- No --> H["Keep first-pass answer"]
+    G --> I["Refined timestamp"]
+    C -- No --> J{"Explicit timestamp<br/>in the question?"}
+    J -- Yes --> K["Up to two ±30 s windows<br/>64 frames split across windows"]
+    J -- No --> L["64 frames over the full clip"]
+    K --> M["Merged Qwen3-VL-4B<br/>format-constrained generation"]
+    L --> M
+    M --> N["Answer cleanup"]
+    H --> O["Atomic answer.json<br/>one response per qID"]
+    I --> O
+    N --> O
+```
+
+Shared processing includes absolute timestamp overlays for temporal questions,
+question-derived answer formats, a bundled surgical knowledge prompt, and
+defensive batch I/O. See [METHOD.md](METHOD.md) for the complete routing,
+training, and runtime description.
 
 ## Weights
 
