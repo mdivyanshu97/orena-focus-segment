@@ -21,6 +21,7 @@ Raw challenge videos and challenge-provided annotations are not redistributed.
 The final selected inference image does not depend on private runtime services
 or external network access.
 
-The full reconstructed recipe, data counts, frame-generation procedure,
-optimizer settings, historical dataset-snapshot note, and selected artifact
-hashes are documented in [METHOD_DESCRIPTION.md](METHOD_DESCRIPTION.md).
+The scientific method description documents the data construction, exact
+training schedule, visual preprocessing, optimization objective, temporal
+inference policy, evaluation, and limitations:
+[METHOD_DESCRIPTION.md](METHOD_DESCRIPTION.md).

@@ -3,20 +3,18 @@
 Public release of **DISCOVR-SEGMENT**, submitted to the ORena SAVE FOCUS 2026
 SEGMENT track by team **Incision Impossible**.
 
-This repository contains the exact inference source recovered from the selected
-container, together with reproducible weight-download, verification, Docker
-build, test, and export commands. Large merged model weights are hosted
-separately on Hugging Face.
+This repository contains the inference implementation used for the reported
+challenge result, a scientific account of the method, and reproducible
+weight-download, verification, Docker build, test, and export commands. Large
+merged model weights are hosted separately on Hugging Face.
 
-## Selected challenge submission
+## Challenge result
 
 | Field | Value |
 |---|---|
-| Public algorithm name | `DISCOVR-SEGMENT` |
-| Grand Challenge algorithm | `DISCOVER SEGMENT T1` |
-| Method ID | `8c0c5a0a-e147-486b-90c8-abbf0afeb624` |
-| Image version | `b74f595d-06d4-488a-b76b-217544cf8e55` |
-| Evaluation ID | `0b0b5564-a3e2-43f3-aa8e-a34fc3e485c9` |
+| Algorithm | `DISCOVR-SEGMENT` |
+| Team | Incision Impossible |
+| Track | SEGMENT |
 | Pre-evaluation score | `0.5656564984886887` |
 | Forfeited / unanswered | `0 / 0` |
 
@@ -51,8 +49,9 @@ Shared processing includes absolute timestamp overlays for temporal questions,
 question-derived answer formats, a bundled surgical knowledge prompt, and
 defensive batch I/O. See [METHOD.md](METHOD.md) for the concise implementation
 description and [METHOD_DESCRIPTION.md](METHOD_DESCRIPTION.md) for the detailed
-challenge-submission draft covering data generation, training, inference,
-evaluation, provenance, and limitations.
+scientific method description covering the research rationale, data
+construction, visual-language adaptation, optimization objective, temporal
+inference, evaluation, and limitations.
 
 ## Weights
 
@@ -110,9 +109,8 @@ source release.
 
 See [TRAINING.md](TRAINING.md),
 [METHOD_DESCRIPTION.md](METHOD_DESCRIPTION.md), and
-[provenance/release.json](provenance/release.json). The source hashes in the
-manifest were measured directly from the selected OCI image, not from the later
-experimental working tree.
+[provenance/release.json](provenance/release.json). The checksums identify the
+released inference implementation and merged checkpoint.
 
 ## Data and safety
 

@@ -1,462 +1,313 @@
-# DISCOVR-SEGMENT: detailed method description
+# DISCOVR-SEGMENT: scientific method description
 
-> Draft for the ORena SAVE FOCUS 2026 method-description submission.
-> Reconstructed on 8 September 2026 from the selected container, public model,
-> training manifests, trainer states, run scripts, and artifact checksums.
+## Abstract
 
-## 1. Submission identification
+DISCOVR-SEGMENT is a video question-answering method for identifying and
+reasoning about foreign objects in short laparoscopic video segments. The
+method was designed around two observations. First, a general-purpose
+vision-language model requires explicit adaptation to laparoscopic appearance,
+where small instruments and foreign objects occupy only a small fraction of
+the image. Second, temporal questions are often limited by evidence selection:
+uniformly sampling a video can leave no frame close to the event mentioned in
+the question.
 
-| Field | Value |
-|---|---|
-| Team | Incision Impossible |
-| Public method name | DISCOVR-SEGMENT |
-| Track | SEGMENT |
-| Grand Challenge algorithm | `DISCOVER SEGMENT T1` |
-| Method ID | `8c0c5a0a-e147-486b-90c8-abbf0afeb624` |
-| Selected image version | `b74f595d-06d4-488a-b76b-217544cf8e55` |
-| Pre-evaluation ID | `0b0b5564-a3e2-43f3-aa8e-a34fc3e485c9` |
-| Base model | `Qwen/Qwen3-VL-4B-Instruct` |
-| Released checkpoint | FullVis-W64, merged bfloat16 |
+We therefore combine a two-stage visual-language adaptation procedure with a
+deterministic temporal evidence policy. A Qwen3-VL-4B model is first adapted to
+surgical scene understanding using SSG-VQA questions paired with CholecT45
+frames. During this stage, low-rank adapters are trained in the language model,
+vision encoder, and vision-language merger. The same adapters are then
+continued on the official FOCUS training questions from HeiCo and LapChole.
+At inference, ordinary questions receive uniformly sampled frames, questions
+that contain timestamps receive evidence centered on those timestamps, and
+single-timestamp localization questions receive a second, denser pass around
+the model's initial prediction. All temporal frames carry an
+absolute-procedure-time overlay.
 
-The exact source release is
-[`mdivyanshu97/orena-focus-segment`](https://github.com/mdivyanshu97/orena-focus-segment).
-The exact merged weights are
-[`Div97/orena-focus-segment-fullvis-w64`](https://huggingface.co/Div97/orena-focus-segment-fullvis-w64).
+The resulting system performs all inference locally and uses no external
+detector, retrieval service, language-model API, or manually created test-time
+annotation.
 
-## 2. Abstract
+## 1. Method rationale
 
-DISCOVR-SEGMENT is a surgical-video visual-question-answering system for
-foreign-object questions over short video segments. It uses a 4-billion-
-parameter Qwen3-VL model adapted in two stages:
+The SEGMENT track contains heterogeneous tasks: object recognition, counting,
+spatial localization, temporal grounding, event understanding, and complex
+reasoning. A single video representation is not equally suitable for all of
+them. Recognition questions benefit from broad coverage of the segment, while
+questions tied to a particular time require high sampling density near that
+time.
 
-1. surgical scene-literacy warm-up on SSG-VQA/CholecT45, with LoRA applied to
-   the language model, vision encoder, and vision-language merger; and
-2. continued supervised fine-tuning on the official FOCUS training questions
-   from the HeiCo and LapChole datasets across the FRAME, SEGMENT, and
-   PROCEDURE tracks.
+DISCOVR-SEGMENT separates the problem into two components:
 
-At inference time, the model is paired with deterministic answer-format
-inference, absolute-time overlays, question-anchored temporal windows, and a
-two-pass timestamp-refinement route. The model is fully local: the submitted
-container uses no network service, external API, detector, retrieval index, or
-human interaction.
+1. **A domain-adapted visual-language model.** Surgical scene familiarity is
+   learned before specializing on the FOCUS foreign-object task.
+2. **A question-conditioned evidence policy.** The frame budget remains
+   bounded, but its temporal placement changes according to the question.
 
-## 3. System overview
+This division preserves a single end-to-end generative model while addressing
+the main source of temporal error outside the network: showing the model the
+wrong part of the video.
 
 ```mermaid
-flowchart TD
-    A["FOCUS training questions<br/>HeiCo + LapChole"] --> B["Chat-format SFT rows<br/>format hints + temporal overlays"]
-    C["SSG-VQA scene questions<br/>paired with CholecT45 frames"] --> D["Stage A: full-visibility warm-up<br/>language r16 + vision r16 + merger r64"]
-    D --> E["Stage B: all-track FOCUS SFT<br/>continue the same adapter"]
-    B --> E
-    E --> F["Merge LoRA into Qwen3-VL-4B<br/>bfloat16 FullVis-W64"]
-    F --> G["SEGMENT container"]
-    G --> H{"Question route"}
-    H -- "ordinary" --> I["64 frames over full segment"]
-    H -- "timestamps stated in question" --> J["up to two ±30 s windows"]
-    H -- "single timestamp answer" --> K["full-clip pass, then<br/>30 s refinement pass"]
-    I --> L["Deterministic generation<br/>and format cleanup"]
-    J --> L
-    K --> L
-    L --> M["Atomic answer.json<br/>one response per qID"]
+flowchart LR
+    A["SSG-VQA + CholecT45 frames"] --> B["Surgical visual warm-up"]
+    B --> C["Joint FOCUS fine-tuning<br/>FRAME + SEGMENT + PROCEDURE"]
+    C --> D["Merged Qwen3-VL-4B"]
+    D --> E{"Question type"}
+    E -- "ordinary" --> F["64 frames across segment"]
+    E -- "timestamp in question" --> G["question-centered windows"]
+    E -- "single timestamp output" --> H["global pass + local refinement"]
+    F --> I["Constrained answer generation"]
+    G --> I
+    H --> I
 ```
 
-## 4. Base model and adaptation
+## 2. Training data
 
-The base model is
-[`Qwen/Qwen3-VL-4B-Instruct`](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct).
-The base weights were loaded in bfloat16; this was conventional LoRA rather
-than 4-bit QLoRA.
+### 2.1 FOCUS supervision
 
-The selected FullVis adapter used:
-
-| Component | LoRA sites | Rank |
-|---|---|---:|
-| Language self-attention | `q_proj`, `k_proj`, `v_proj`, `o_proj` | 16 |
-| Language MLP | `gate_proj`, `up_proj`, `down_proj` | 16 |
-| Vision blocks | `qkv`, `proj`, `linear_fc1`, `linear_fc2` | 16 |
-| Visual merger and deep-stack mergers | merger modules matched by `.*merger.*` | 64 |
-
-Shared LoRA settings were alpha 32, dropout 0.05, no bias adaptation, no DoRA,
-and causal-language-model task mode. The vision and merger sites introduced in
-Stage A remained trainable during Stage B because Stage B continued the same
-adapter rather than attaching a new language-only adapter.
-
-## 5. Training data
-
-### 5.1 Official FOCUS training export
-
-The final Stage-B manifest was `alltracks_train_v2_64f.jsonl`.
-
-| Property | Value |
-|---|---:|
-| Rows | 34,290 |
-| File size | 196,783,311 bytes |
-| SHA-256 | `48f79a5ae40971a43c47bf8686d26280a0d24a2eecf0ce4e2de2f70020c177da` |
-| MD5 | `4977ecd14092719ab797760de09f37b7` |
-| HeiCo rows | 20,000 |
-| LapChole rows | 14,290 |
-| FRAME rows | 13,730 |
-| SEGMENT rows | 13,680 |
-| PROCEDURE rows | 6,880 |
-
-Breakdown by dataset and track:
+The task-specific training corpus contains 34,290 questions from the official
+HeiCo and LapChole training splits. We trained jointly on all three FOCUS
+tracks rather than fitting a SEGMENT-only model.
 
 | Dataset | FRAME | SEGMENT | PROCEDURE | Total |
 |---|---:|---:|---:|---:|
 | HeiCo | 8,000 | 8,000 | 4,000 | 20,000 |
 | LapChole | 5,730 | 5,680 | 2,880 | 14,290 |
+| **Total** | **13,730** | **13,680** | **6,880** | **34,290** |
 
-The manifest referenced 20 HeiCo training videos and 72 LapChole training
-videos overall. One LapChole video had no SEGMENT row in this historical
-export, so SEGMENT itself covered 71 LapChole videos.
+The corpus spans 20 HeiCo and 72 LapChole training videos. Its answer formats
+include 11,531 foreign-object classification targets, 8,375 timestamps, 6,556
+integers, 3,146 multiple-choice answers, 2,791 binary answers, 1,807
+open-ended answers, and 84 percentages.
 
-Answer-format distribution:
+Each organizer-provided training example was converted into a multimodal chat
+example containing the annotated video interval, question, answer format,
+capability label, and gold answer. The raw question was followed by a short
+format instruction. For example, a binary question requested exactly
+`yes` or `no`, while a temporal question requested a timestamp in
+`hh:mm:ss` form. These instructions reduce errors caused solely by strict
+answer parsing.
 
-| Format | Rows |
-|---|---:|
-| Foreign-object class | 11,531 |
-| Timestamp | 8,375 |
-| Integer | 6,556 |
-| Multiple choice | 3,146 |
-| Binary | 2,791 |
-| Open ended | 1,807 |
-| Percentage | 84 |
+No new semantic labels were introduced. The generated records are a
+reformatting of the official training annotations, not pseudo-labels or
+additional human annotations.
 
-The capability mix included object identification, spatial localization,
-temporal localization, aggregation, instance matching, duration estimation,
-event understanding, and complex reasoning. Training was joint across all
-three tracks; the selected SEGMENT model was not trained on SEGMENT alone.
+### 2.2 Surgical scene-literacy warm-up
 
-### 5.2 FOCUS row generation
+Before FOCUS specialization, the model was trained on 238,925 scene-level
+questions derived from SSG-VQA and CholecT45. The corpus contains 24,250
+unique frames from 45 surgical videos. It includes questions about anatomy,
+instruments, spatial relationships, object presence, and counts:
 
-Each official training question was converted into one multimodal chat record
-containing:
-
-- dataset, track, question ID, and source-video path;
-- clip start and end times;
-- a system prompt;
-- the original question plus a mechanically selected output-format hint;
-- the organizer-provided gold answer;
-- answer format and primary capability;
-- requested frame count; and
-- whether an absolute-time overlay should be drawn.
-
-No new human labels were created for the FOCUS questions. The conversion
-reformatted the official training annotations for supervised instruction
-tuning; it did not use test answers or pseudo-labels.
-
-Frame budgets in the selected manifest were:
-
-| Track | Frames per row |
-|---|---:|
-| FRAME | 1 |
-| SEGMENT | 64 |
-| PROCEDURE | 64 |
-
-An overlay was enabled for timestamp answers and the temporal-localization,
-duration-estimation, and temporal-ordering capabilities. This produced 8,732
-overlay rows and 25,558 non-overlay rows.
-
-The format hint required an exact representation where the evaluator uses a
-strict parser, for example `yes`/`no`, a bare integer, a foreign-object class,
-or `hh:mm:ss`. The training target remained the original gold answer.
-
-The historical manifest carried two prompt snapshots: HeiCo rows used a
-6,415-character system prompt with the then-current knowledge card, whereas
-LapChole rows used a 3,043-character prompt without it. The deployed SEGMENT
-container uses its own bundled 6,648-character prompt with the knowledge card
-and current bundled definitions. This train/serve prompt difference is
-reported as part of the actual selected provenance.
-
-### 5.3 Frame extraction
-
-Frames were sampled uniformly within the annotated interval. Inclusive frame
-bounds were computed by rounding `time × FPS`, clamping to the video, and
-placing up to the requested number of unique indices uniformly between the
-bounds.
-
-Images were downscaled with bilinear interpolation only when their longest
-side exceeded 768 pixels. To avoid repeatedly opening large videos during
-training, the sampled images were cached as JPEG files at quality 95. The cache
-key included question ID, track, interval, frame count, and overlay state.
-
-For temporal rows, an `hh:mm:ss` absolute-procedure-time clock was burned into
-the upper-left corner in yellow with a black outline. The timestamp was
-calculated from the source frame index and FPS, not from the beginning of a
-trimmed clip.
-
-### 5.4 Historical FOCUS snapshot note
-
-The selected models were trained on the exact July 2026 manifest identified by
-the hashes above. A later audit compared it with newer pinned dataset
-revisions and found that 5.3% of rows had been replaced, remapped, or corrected
-upstream. The audit found:
-
-- zero rows sourced from an official test split;
-- zero answer-format drift on joined rows;
-- zero cross-track ID artifacts; and
-- 39 historical LapChole targets containing `Unknown foreign object`, a label
-  present in an older upstream revision and removed later.
-
-Corrected manifests were built after this audit, but retrains on them were not
-the checkpoints selected for the submitted SEGMENT image. This description
-therefore reports the historical data actually used, not the later corrected
-alternative.
-
-### 5.5 SSG-VQA surgical scene-literacy corpus
-
-Stage A used a locally generated manifest called
-`ssgvqa_scene_train.jsonl`, built from
-[SSG-VQA](https://github.com/camma-public/ssg-vqa) questions and matching
-CholecT45 frame records.
-
-| Property | Value |
-|---|---:|
-| Rows | 238,925 |
-| Unique source videos | 45 |
-| Unique video frames | 24,250 |
-| Images per row | 1 |
-| SHA-256 | `1a132e94c566daee827118868b0669683bf6084060ebc128e6d528c1ded7cf35` |
-
-Question-type distribution:
-
-| SSG-VQA type | Rows |
+| Question family | Examples |
 |---|---:|
 | Spatial localization | 48,455 |
-| Count | 48,029 |
+| Counting | 48,029 |
 | Existence | 48,025 |
-| Component query | 47,890 |
-| Presence | 46,526 |
+| Component identification | 47,890 |
+| General presence | 46,526 |
 
-Answer-format distribution was 142,824 open-ended, 48,072 binary, and 48,029
-integer questions.
+To construct this corpus, SSG-VQA question files were joined to CholecT45
+image records by video and frame identifiers. Alternate annotation directories
+for the same underlying video were de-duplicated. We retained at most two
+questions of a given family for each frame to prevent highly annotated frames
+from dominating optimization. Questions without a corresponding image were
+discarded. Original answers were preserved, except that Boolean
+`true`/`false` values were normalized to `yes`/`no`.
 
-The builder:
+This stage was deliberately not converted into the FOCUS label vocabulary.
+Its purpose was to improve the representation of laparoscopic anatomy,
+instruments, spatial relations, and small visual structures before learning
+the challenge-specific foreign-object task.
 
-1. indexed CholecT45 parquet rows by `(video_id, frame_id)`;
-2. de-duplicated alternate `_clean`/`_old` annotation directories for the same
-   base video;
-3. retained count, component, existence, spatial, and presence questions;
-4. limited each `(frame, question type)` cell to two questions;
-5. discarded questions without a matching image rather than fabricating an
-   image; and
-6. retained the original scene answer, with only `true`/`false` normalized to
-   `yes`/`no`.
+### 2.3 Dataset provenance
 
-This warm-up was intended to teach laparoscopic scene perception—anatomy,
-instruments, spatial relations, existence, and counts—before specializing on
-the FOCUS foreign-object vocabulary. It did not convert SSG-VQA answers into
-FOCUS classes.
+The selected model was trained on the historical FOCUS training snapshot
+available during model development. A later comparison with updated dataset
+revisions found that some question identifiers and labels had subsequently
+changed upstream. The audit found no overlap with official test questions or
+test videos. The selected model was not retrained on the later corrected
+snapshot, so all results reported for this method correspond to the original
+training corpus.
 
-SSG-VQA is provided for non-commercial scientific research under CC
-BY-NC-SA 4.0. Users of these weights remain responsible for complying with
-the source dataset terms.
+## 3. Visual preprocessing
 
-## 6. Training procedure
+### 3.1 Uniform frame sampling
 
-### 6.1 Stage A: full-visibility surgical warm-up
+For a video interval with start time \(t_s\), end time \(t_e\), and frame rate
+\(f\), the inclusive frame bounds are
 
-Stage A trained the language, vision, and merger LoRA sites on the SSG-VQA
-manifest.
+\[
+i_s = \operatorname{round}(f t_s), \qquad
+i_e = \operatorname{round}(f t_e).
+\]
 
-| Hyperparameter | Value |
-|---|---|
-| Dataset size supplied | 238,925 rows |
-| Evaluation holdout | 1% row-random holdout |
-| Effective training rows | 236,536 |
-| Holdout split seed | 0 |
-| Epochs | 1 |
-| GPUs | 8 |
-| Per-device batch | 1 |
-| Gradient accumulation | 2 |
-| Effective global batch | 16 |
-| Optimizer steps | 14,784 |
-| Learning rate | `1e-4` |
-| Optimizer | fused AdamW |
-| Scheduler | cosine |
-| Warm-up ratio | 0.03 |
-| Weight decay | 0 |
-| Gradient clipping | 1.0 |
-| Precision | bfloat16 |
-| Gradient checkpointing | enabled |
-| Seed | 42 |
+For a budget of \(K\) frames, the sampled indices are
 
-The best recorded Stage-A evaluation loss was approximately 0.2291 at step
-14,000. The final one-epoch adapter was used to initialize Stage B.
+\[
+i_j =
+\operatorname{round}\left(
+i_s + \frac{j}{K-1}(i_e-i_s)
+\right), \qquad j=0,\ldots,K-1.
+\]
 
-### 6.2 Stage B: joint FOCUS fine-tuning
+Indices are clamped to the video, de-duplicated, and kept in chronological
+order. FRAME examples use one image; SEGMENT and PROCEDURE examples use up to
+64 images. Images are downscaled with bilinear interpolation only when their
+longest side exceeds 768 pixels.
 
-Stage B continued the Stage-A adapter on the 34,290-row FOCUS manifest.
+Training frames were pre-extracted to a deterministic JPEG cache to avoid
+repeatedly decoding large videos. The cache used quality 95 and included the
+question, interval, frame count, and overlay state in its key.
 
-| Hyperparameter | Value |
-|---|---|
-| Evaluation holdout | 3% row-random holdout |
-| Training rows | 33,262 |
-| Evaluation rows | 1,028 |
-| Holdout split seed | 0 |
-| Epochs | 3 |
-| GPUs | 8 |
-| Per-device batch | 1 |
-| Gradient accumulation | 2 |
-| Effective global batch | 16 |
-| Optimizer steps | 6,237 |
-| Learning rate | `1e-4` |
-| Optimizer | fused AdamW |
-| Scheduler | cosine |
-| Warm-up ratio | 0.03 |
-| Weight decay | 0 |
-| Gradient clipping | 1.0 |
-| Precision | bfloat16 |
-| Gradient checkpointing | enabled |
-| Maximum frames | 64 |
-| Maximum image side | 768 pixels |
-| Seed | 42 |
+### 3.2 Absolute-time overlay
 
-The selected adapter completed step 6,237. The surviving handoff for the
-selected FullVis-W64 run records its lowest evaluation loss as approximately
-0.2667 at step 6,000.
-Checkpoint selection for challenge use was ultimately based on answer accuracy
-and route-level evaluation rather than training loss alone.
+Temporal answers refer to absolute procedure time, whereas a trimmed video
+begins at local time zero. For a sampled frame at local clip time
+\(t_{\text{clip}}\), we render
 
-### 6.3 Objective and batching
+\[
+t_{\text{absolute}} = t_{\text{request-start}} + t_{\text{clip}}.
+\]
 
-The Qwen chat template was applied to the system message and the sequence of
-sampled images followed by the question. Training labels were masked over:
+The timestamp is drawn in the upper-left corner as yellow `hh:mm:ss` text with
+a black outline. The overlay is used for timestamp prediction, temporal
+localization, duration estimation, and temporal ordering. It was enabled for
+8,732 of the 34,290 FOCUS training examples.
 
-- padding;
-- the entire prompt;
-- image placeholder tokens; and
-- all other non-answer positions.
+## 4. Model and optimization
 
-Cross-entropy was therefore computed only on gold answer tokens. Per-example
-loss was the mean over supervised answer tokens, followed by a batch mean.
-No capability reweighting, replay mixture, auxiliary digit loss, or 4-bit
-quantization was used in the selected run.
+### 4.1 Base architecture
 
-For memory efficiency, the language-model head computed logits only for the
-trailing span that could contain supervised answer tokens. This changes the
-allocation size but not the answer-token objective.
+The base network is Qwen3-VL-4B-Instruct. It receives a sequence of images and
+text through the native multimodal chat representation and autoregressively
+generates the answer.
 
-### 6.4 Merge and released model
+We use low-rank adaptation. For a frozen weight matrix \(W\), the trainable
+update is
 
-The final adapter was merged into the base model with
-`peft.merge_and_unload` and saved in bfloat16.
+\[
+W' = W + \frac{\alpha}{r} BA,
+\]
 
-| Artifact | SHA-256 |
-|---|---|
-| Merged `model.safetensors` | `622fd66547b2ad88f9fcf9c74a22450f44b4c88cef8fcf1a9b464de2a51dcff3` |
-| Selected `inference.py` | `4eaa5da09e5563154d8c9f9d9515f7c470492d89446ed0d8ae35ca877078372d` |
+where \(A\) and \(B\) are low-rank matrices, \(r\) is the adapter rank, and
+\(\alpha\) controls update scale.
 
-The merged weight file is 8,875,719,408 bytes.
+### 4.2 Stage A: full-visibility surgical adaptation
 
-## 7. Inference
+The first stage trains:
 
-### 7.1 Input handling
+- rank-16 adapters in language attention and MLP projections;
+- rank-16 adapters in vision attention and MLP projections; and
+- rank-64 adapters in the vision-language merger and deep-stack mergers.
 
-For each question, the container reads the request metadata and the matching
-plain trimmed video. It uses its bundled foreign-object definitions because
-these match the deployed prompt. The platform-provided relative-time overlay
-video is not used; the system redraws an absolute-time overlay on plain frames
-when required.
+All adapters use alpha 32 and dropout 0.05. The 238,925-example
+scene-literacy corpus is split into 236,536 training and 2,389 monitoring
+examples. Training runs for one epoch on eight GPUs with per-device batch
+size 1 and two gradient-accumulation steps, giving an effective batch size of
+16 and 14,784 optimizer updates.
 
-The answer format is not present in the runtime request, so it is inferred
-deterministically from the question text. The inferred format controls:
+### 4.3 Stage B: joint FOCUS specialization
 
-- the appended format instruction;
-- whether temporal overlaying is enabled;
-- the generation token limit; and
-- output cleanup.
+The same adapters are continued on the joint FOCUS corpus, so the vision and
+merger adaptations remain trainable. A row-random split assigns 33,262
+examples to optimization and 1,028 to loss monitoring. Training runs for
+three epochs on eight GPUs with per-device batch size 1 and two
+gradient-accumulation steps. The effective batch size is again 16, producing
+6,237 optimizer updates.
 
-### 7.2 Frame routing
+Both stages use bfloat16 precision, fused AdamW, a learning rate of
+\(10^{-4}\), cosine decay, a 3% warm-up fraction, zero weight decay,
+gradient-norm clipping at 1.0, gradient checkpointing, and random seed 42.
 
-| Route | Model evidence |
-|---|---|
-| Ordinary question | 64 frames uniformly sampled over the complete segment |
-| Explicit timestamps in a non-cascade question | Up to two question-anchored windows, each using a ±30-second half-width; the 64-frame budget is divided across windows |
-| Single-timestamp question, pass 1 | 64 frames over the complete segment with absolute-time overlay |
-| Single-timestamp question, pass 2 | 64 frames in a 30-second total window centered on the first predicted timestamp |
-| Multi-event timestamp-list question | Question-window or full-clip route without collapsing to a single refinement center |
+### 4.4 Supervised objective
 
-Question-window sampling is clamped to the available clip. The refinement pass
-is accepted only if it returns a valid timestamp; otherwise the valid first
-answer is retained.
+The training sequence consists of the system instruction, image tokens,
+question, and gold answer. Loss is applied only to answer tokens. If
+\(\mathcal{A}\) denotes answer-token positions, the objective is
 
-### 7.3 Prompt and decoding
+\[
+\mathcal{L} =
+-\frac{1}{|\mathcal{A}|}
+\sum_{t \in \mathcal{A}}
+\log p_\theta(y_t \mid x, y_{<t}).
+\]
 
-The deployed SEGMENT system prompt contains:
+Padding, image placeholders, system instructions, and question tokens are
+masked. No capability reweighting, synthetic replay mixture, or auxiliary
+numeric loss is used in the selected model.
 
-- a concise surgical VQA instruction;
-- the bundled foreign-object definitions; and
-- the selected surgical-safety knowledge card.
+After training, the adapters are merged into the base weights in bfloat16 for
+deployment.
 
-The knowledge card is static text, not retrieved information. Generation is
-greedy and deterministic (`do_sample=False`). Ordinary questions are limited
-to 32 new tokens. Mechanically recognized multi-timestamp questions may use up
-to 128 tokens.
+## 5. Question-conditioned inference
 
-### 7.4 Output normalization
+### 5.1 Ordinary questions
 
-Post-processing extracts the strict answer representation required by the
-challenge:
+Questions without a temporal anchor receive 64 frames sampled uniformly over
+the complete segment. This maximizes broad visual coverage for recognition,
+counting, aggregation, and reasoning tasks.
 
-- binary: `yes` or `no`;
-- integer: non-negative digits;
-- percentage: numeric value;
-- foreign-object class: canonical class name(s) or `none`;
-- time: zero-padded `hh:mm:ss`;
-- multiple choice: one supplied option; or
-- concise text for semantically judged formats.
+### 5.2 Timestamps stated in the question
 
-The cleaner preserves the model's first-mentioned order for multi-class
-answers while canonicalizing class spelling.
+If the question itself contains one or more timestamps, broad sampling is
+unnecessary and may omit the relevant event. We extract at most two timestamps
+and create a window
 
-### 7.5 Reliability
+\[
+[a_m-30\text{ s},\,a_m+30\text{ s}]
+\]
 
-The model is loaded and warmed once per batch. Each question is isolated by its
-own exception boundary. The output layer preserves request order, emits one
-response per recoverable question ID, pads missing responses, and atomically
-renames a temporary file to `/output/answer.json`.
+around each anchor \(a_m\). The 64-frame budget is divided between the
+windows, which are clamped to the available segment. This increases temporal
+density without increasing the total frame budget.
 
-A model-loading or GPU-setup failure is raised rather than disguised as a
-successful batch of empty answers.
+### 5.3 Single-timestamp refinement
 
-### 7.6 Container environment
+For questions whose answer is one timestamp, inference uses two passes:
 
-The released `linux/amd64` image is based on
-`pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime`. Principal pinned runtime
-packages are PyTorch 2.11.0, `orena-focus` 0.3.5, Transformers 5.4.0,
-`qwen-vl-utils` 0.0.14, PEFT 0.19.1, Accelerate 1.14.0, and Safetensors
-0.7.0. A build-time guard checks that the installed PyTorch remains a CUDA
-12.8 build with the required GPU architectures.
+1. predict \(p_0\) from 64 frames distributed over the full segment;
+2. if \(p_0\) is valid, sample 64 frames from
+   \([p_0-15\text{ s}, p_0+15\text{ s}]\) and predict \(p_1\).
 
-## 8. Model and route selection
+The second answer is used only if it contains a valid timestamp; otherwise the
+first answer is retained. Questions requesting multiple time points do not use
+this single-center refinement, because concentrating on one event could remove
+evidence for the others.
 
-Model selection used paired local comparisons on official training/evaluation
-interfaces and targeted route gates. The full-visibility warm start materially
-improved the SEGMENT model relative to the earlier language-only warm start.
-Question-window and timestamp-refinement routes were retained because they
-improved the corresponding temporal subsets while remaining within the pooled
-latency allowance.
+## 6. Prompting and answer normalization
 
-Local development scores are not presented as hidden-test estimates. The
-official pre-evaluation result below is the platform measurement for the
-selected image.
+The inference prompt contains the foreign-object definitions and a fixed
+surgical-safety knowledge section. The latter provides background for
+functional and causal questions but does not retrieve patient-specific
+information.
 
-## 9. Official pre-evaluation result
+The answer format is inferred deterministically from question wording because
+it is not supplied to the runtime algorithm. Generation is greedy
+(`do_sample=False`). Most questions are limited to 32 new tokens; questions
+that require lists of timestamps may use up to 128.
 
-| Metric | Value |
-|---|---:|
-| Pre-evaluation score | 0.5656564985 |
-| Questions | 2,000 |
-| Batches | 4 |
-| Questions forfeited | 0 |
-| Questions unanswered | 0 |
-| Mean batch duration | 2,685.7167 s |
-| Mean net latency per question | 5.1314 s |
-| Throughput including setup | 0.1862 questions/s |
+Generated text is normalized to the challenge representation: binary answers
+become `yes` or `no`, numbers become bare non-negative integers, class answers
+are mapped to canonical foreign-object names, and timestamps are zero-padded
+to `hh:mm:ss`. Open-ended answers remain concise free text.
 
-Bucket accuracies:
+## 7. Runtime behavior
+
+The merged model is loaded once per batch and warmed with a small synthetic
+image. Questions are then processed independently. A failure on one question
+does not prevent later questions from being answered. Responses retain input
+order and are written atomically, with one output record for each recoverable
+question identifier.
+
+The released container performs no network communication during inference.
+
+## 8. Evaluation
+
+The selected method achieved an official SEGMENT pre-evaluation score of
+0.5657 on 2,000 questions, with no unanswered or latency-forfeited questions.
+The measured net processing time was approximately 5.13 seconds per question,
+excluding the platform's one-time batch setup allowance.
 
 | Capability | In distribution | Out of distribution |
 |---|---:|---:|
@@ -466,50 +317,24 @@ Bucket accuracies:
 | Temporal grounding | 0.6267 | 0.6402 |
 | Event understanding | 0.5000 | 0.3158 |
 
-## 10. Reproducibility and public artifacts
+Model and route selection used answer accuracy rather than training loss alone.
 
-The repository publishes:
+## 9. Limitations
 
-- exact selected inference source;
-- Dockerfile and build/export scripts;
-- a pinned weight downloader;
-- SHA-256 verification;
-- route modules and prompts;
-- release provenance; and
-- the detailed method description.
+Uniform sampling remains sparse relative to the video frame rate and can miss
+very short events. The second temporal pass depends on a reasonable first
+prediction and therefore cannot always recover from a large initial error.
+The training monitoring split was row-random rather than video-disjoint and
+should not be interpreted as an unbiased generalization estimate. Finally,
+the knowledge prompt can influence an answer when visual evidence is weak.
 
-Raw challenge videos, patient data, and organizer annotations are not
-redistributed. Reproduction requires legitimate access to the source datasets
-under their original terms.
+DISCOVR-SEGMENT is a research challenge system and is not intended for
+clinical decision support.
 
-## 11. Limitations
+## 10. Data and software terms
 
-- Uniform frame sampling can miss brief events between sampled frames.
-- The training-loss holdouts were row-random, not video-disjoint, and were used
-  for monitoring rather than unbiased generalization estimates.
-- The selected FOCUS manifest predates later upstream label and ID corrections.
-- The knowledge card may help reasoning questions but can also influence
-  answers when visual evidence is weak.
-- The system is a challenge research prototype, not a medical device or
-  clinical decision-support system.
-
-## 12. Licensing and data governance
-
-- Repository code: Apache-2.0.
-- Qwen3-VL base model: Apache-2.0.
-- SSG-VQA: CC BY-NC-SA 4.0 for non-commercial scientific research.
-- FOCUS, HeiCo, LapChole, CholecT45, and challenge assets: governed by their
-  respective owners and access terms.
-
-No credentials, raw patient videos, or private test annotations are included
-in the public release.
-
-## 13. Items to finalize before portal submission
-
-- Add the final author list, affiliations, and corresponding contact.
-- Add any method-description template fields or page limit supplied by the
-  organizers.
-- Confirm the deadline shown in the live Grand Challenge portal; the static
-  challenge dates page and portal text have shown different September dates.
-- Export this Markdown to PDF if the submission form requires a document
-  upload.
+The implementation and Qwen3-VL base model are distributed under Apache-2.0.
+SSG-VQA is provided for non-commercial scientific research under CC
+BY-NC-SA 4.0. FOCUS, HeiCo, LapChole, CholecT45, and associated videos remain
+subject to their respective owners' access and licensing terms. No raw
+patient videos or private challenge annotations are included in this release.
