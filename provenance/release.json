@@ -20,6 +20,7 @@
   "model": {
     "base_model": "Qwen/Qwen3-VL-4B-Instruct",
     "public_repo": "Div97/orena-focus-segment-fullvis-w64",
+    "revision": "ab709ec95ab4c5cc73eb97664191a8f8d76cc59a",
     "model_sha256": "622fd66547b2ad88f9fcf9c74a22450f44b4c88cef8fcf1a9b464de2a51dcff3",
     "size_bytes": 8875719408
   }

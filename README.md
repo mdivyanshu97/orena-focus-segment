@@ -52,6 +52,9 @@ The expected `model.safetensors` SHA-256 is:
 622fd66547b2ad88f9fcf9c74a22450f44b4c88cef8fcf1a9b464de2a51dcff3
 ```
 
+The download script pins Hugging Face revision
+`ab709ec95ab4c5cc73eb97664191a8f8d76cc59a`.
+
 ## Build
 
 Docker with the NVIDIA runtime is required for the full smoke test.
